@@ -1,0 +1,145 @@
+
+import threading
+import tornado.ioloop
+import tornado.web
+import tornado.websocket
+import tornado.template
+import time
+import websocket
+
+from random import randint
+
+
+global running
+global ws
+clients = []
+netbook = []
+c=0
+#Initialize TOrnado to use 'GET' and load index.html
+class MainHandler(tornado.web.RequestHandler):
+  def get(self):
+    loader = tornado.template.Loader(".")
+    self.write(loader.load("index.html").generate())
+
+#Code for handling the data sent from the webpage
+class WSHandlerNetbook(tornado.websocket.WebSocketHandler):
+	def check_origin(self, origin):
+    		return True
+	def open(self):
+		print 'Netbook connection opened...'
+		netbook.append(self)
+	def on_message(self, message):
+		print 'Netbook Message: ', message
+	def on_close(self):
+		print 'Netbook connection closed...'
+	def msg(self, url):
+		self.write_message(u"controlling" + url)
+	def msg2(self):
+		self.write_message(u"asdf")
+
+#Code for handling the data sent from the webpage
+class WSHandler(tornado.websocket.WebSocketHandler):
+	active=False
+	count=0
+	def check_origin(self, origin):
+    		return True
+	def open(self):
+		clients.append(self)
+		print 'connection opened...'
+		print clients
+	def on_message(self, message):
+		if clients.index(self) == 0:
+			print 'received:', message
+			ws.send(message)
+	def on_close(self):
+		clients.remove(self)
+		print 'connection closed...'
+		print clients
+		netbook[0].write_message(u"closed")
+
+	def msg(self):
+		self.write_message(u"Message: " + str(self.count)+ " " + str(clients))
+	
+	def activate(self):
+		if self.active == False:
+			self.active = True
+			s = str(randint(3333,4444));
+			self.write_message(u"controlling" +  s)			
+			netbook[0].msg(s)
+
+
+application = tornado.web.Application([
+  (r'/ws', WSHandler),
+  (r'/netbook', WSHandlerNetbook),
+  (r'/', MainHandler),
+  (r"/(.*)", tornado.web.StaticFileHandler, {"path": "./resources"}),
+])
+
+class myThread (threading.Thread):
+    def __init__(self, threadID, name, counter):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+    def run(self):
+        print "Ready"
+        while running:
+        	time.sleep(1)              # sleep for 200 ms
+		if len(clients) != 0:		
+			clients[0].count = clients[0].count + 1
+			clients[0].msg
+			clients[0].activate()
+
+			if clients[0].count == 11:
+				clients[0].close()
+				clients.remove(clients[0]);
+				if len(netbook) != 0:
+					netbook[0].write_message(u"closed")
+
+
+			for c in clients:
+				c.msg()
+
+		#print ws.connected
+		#print ws._tunnel
+		#print ws.recv
+		if len(netbook) == 0:
+			print 'netbook not connected'
+
+
+
+def stuff(self):
+	l = dir(ws)
+	print ws.l
+
+def on_message(ws, message):
+	print message
+
+def on_error(ws, error):
+	print error
+
+def on_close(ws):
+	print "### closed ###"
+
+def on_open(ws):
+	print "ws opened"
+
+
+if __name__ == "__main__":
+	running = True	
+	thread1 = myThread(1, "Thread-1", 1)
+	thread1.setDaemon(True)
+	thread1.start()  
+	application.listen(9093) #9093         	#starts the websockets connection
+
+	websocket.enableTrace(True)
+	#ws = websocket.create_connection("ws://192.168.1.101:9094/ws")
+	ws = websocket.WebSocketApp("ws://192.168.1.101:9094/ws", on_error = on_error, on_close = on_close)
+
+	ws.on_open = on_open
+	ws.run_forever()
+
+#	ws.run_forever()
+
+	tornado.ioloop.IOLoop.instance().start()
+

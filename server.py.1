@@ -1,0 +1,86 @@
+
+import threading
+import tornado.ioloop
+import tornado.web
+import tornado.websocket
+import tornado.template
+import time
+
+from random import randint
+
+
+global running
+clients = []
+c=0
+#Initialize TOrnado to use 'GET' and load index.html
+class MainHandler(tornado.web.RequestHandler):
+  def get(self):
+    loader = tornado.template.Loader(".")
+    self.write(loader.load("index.html").generate())
+
+#Code for handling the data sent from the webpage
+class WSHandler(tornado.websocket.WebSocketHandler):
+	active=False
+	count=0
+	def check_origin(self, origin):
+    		return True
+	def open(self):
+		clients.append(self)
+		print 'connection opened...'
+		print clients
+	def on_message(self, message):
+		if clients.index(self) == 0:
+			print 'received:', message
+	def on_close(self):
+		clients.remove(self)
+		print 'connection closed...'
+		print clients
+	def msg(self):
+		self.write_message(u"Message: " + str(self.count)+ " " + str(clients))
+	
+	def activate(self):
+		if self.active == False:
+			self.active = True
+			self.write_message(u"controlling" +  str(randint(3333,4444)))			
+
+application = tornado.web.Application([
+  (r'/ws', WSHandler),
+  (r'/', MainHandler),
+  (r"/(.*)", tornado.web.StaticFileHandler, {"path": "./resources"}),
+])
+
+class myThread (threading.Thread):
+    def __init__(self, threadID, name, counter):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+    def run(self):
+        print "Ready"
+        while running:
+        	time.sleep(1)              # sleep for 200 ms
+		if len(clients) != 0:		
+			clients[0].count = clients[0].count + 1
+			clients[0].msg
+			clients[0].activate()
+
+			if clients[0].count == 11:
+				clients[0].close()
+				clients.remove(clients[0]);
+
+
+			for c in clients:
+				c.msg()
+
+
+
+if __name__ == "__main__":
+	running = True	
+	thread1 = myThread(1, "Thread-1", 1)
+	thread1.setDaemon(True)
+	thread1.start()  
+	application.listen(9093) #9093         	#starts the websockets connection
+
+
+	tornado.ioloop.IOLoop.instance().start()
+
